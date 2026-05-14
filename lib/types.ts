@@ -21,6 +21,7 @@ export interface SetupStep {
 export interface SetupGuide {
   method: string;
   steps: SetupStep[];
+  comingSoonMessage?: string;
 }
 
 export interface DashboardStat {

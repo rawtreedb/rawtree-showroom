@@ -105,7 +105,8 @@ export function SetupSteps({ guides }: { guides: SetupGuide[] }) {
             Coming soon
           </p>
           <p className="mt-1 text-xs text-muted-foreground/70">
-            Terraform support for the MongoDB CDC connector is on our roadmap.
+            {guide.comingSoonMessage ??
+              `${guide.method} setup for this use case is on our roadmap.`}
           </p>
         </div>
       ) : (

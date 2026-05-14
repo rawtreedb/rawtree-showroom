@@ -251,6 +251,8 @@ rtree key create --name mongo-cdc --permission read_write`,
     {
       method: "Terraform",
       steps: [],
+      comingSoonMessage:
+        "Terraform support for the MongoDB CDC connector is on our roadmap.",
     },
   ],
   publishedAt: "2026-05-13",
