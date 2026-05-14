@@ -17,11 +17,7 @@ import {
 } from "@/lib/dashboard-queries";
 import type { DashboardConfig, DashboardQuery } from "@/lib/types";
 
-interface Stats {
-  totalEvents: number;
-  uniqueRepos: number;
-  uniqueContributors: number;
-}
+type Stats = Record<string, number>;
 
 function formatNumber(n: number): string {
   if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + "M";
@@ -70,11 +66,11 @@ export function DashboardGrid({ queries, dashboardConfig }: { queries: Dashboard
         const statsResult = await runQuery(cfg.endpoint, cfg.apiKey, buildStatsQuery(dashboardConfig));
         if (statsResult.data[0]) {
           const row = statsResult.data[0];
-          setStats({
-            totalEvents: Number(row.total_events) || 0,
-            uniqueRepos: Number(row.unique_repos) || 0,
-            uniqueContributors: Number(row.unique_contributors) || 0,
-          });
+          const parsed: Stats = {};
+          for (const s of dashboardConfig.stats) {
+            parsed[s.key] = Number(row[s.key]) || 0;
+          }
+          setStats(parsed);
         }
       } catch {
         // stats are non-critical
@@ -177,11 +173,11 @@ export function DashboardGrid({ queries, dashboardConfig }: { queries: Dashboard
         onDisconnect={handleDisconnect}
       />
 
-      {stats && (
-        <div className="mb-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
-          <StatCard label="Total Events" value={formatNumber(stats.totalEvents)} />
-          <StatCard label="Unique Repos" value={formatNumber(stats.uniqueRepos)} />
-          <StatCard label="Unique Contributors" value={formatNumber(stats.uniqueContributors)} />
+      {stats && dashboardConfig.stats.length > 0 && (
+        <div className={`mb-3 grid grid-cols-2 gap-3 sm:grid-cols-${Math.min(dashboardConfig.stats.length, 4)}`}>
+          {dashboardConfig.stats.map((s) => (
+            <StatCard key={s.key} label={s.label} value={formatNumber(stats[s.key] ?? 0)} />
+          ))}
         </div>
       )}
 
