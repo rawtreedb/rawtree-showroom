@@ -28,12 +28,35 @@ SELECT
 FROM events`;
 }
 
+const ISO_DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
+
+/** Ensures value is a real calendar day YYYY-MM-DD with no extra characters (safe as a quoted SQL literal). */
+function assertSqlDateLiteral(value: string, label: string): void {
+  if (!ISO_DATE_ONLY.test(value)) {
+    throw new Error(`${label} must be YYYY-MM-DD`);
+  }
+  const y = Number(value.slice(0, 4));
+  const mo = Number(value.slice(5, 7));
+  const d = Number(value.slice(8, 10));
+  const dt = new Date(Date.UTC(y, mo - 1, d));
+  if (
+    dt.getUTCFullYear() !== y ||
+    dt.getUTCMonth() !== mo - 1 ||
+    dt.getUTCDate() !== d
+  ) {
+    throw new Error(`Invalid calendar date for ${label}`);
+  }
+}
+
 export function injectDateFilter(
   sql: string,
   dateFrom: string,
   dateTo: string,
   dateExpression: string
 ): string {
+  assertSqlDateLiteral(dateFrom, "dateFrom");
+  assertSqlDateLiteral(dateTo, "dateTo");
+
   const condition = `${dateExpression} >= '${dateFrom}' AND ${dateExpression} <= '${dateTo} 23:59:59'`;
 
   const cteEnd = sql.indexOf(")\nSELECT");
