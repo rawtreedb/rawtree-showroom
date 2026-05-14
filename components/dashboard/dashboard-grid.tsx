@@ -15,7 +15,13 @@ import {
   buildStatsQuery,
   injectDateFilter,
 } from "@/lib/dashboard-queries";
-import type { DashboardQuery, DashboardConfig } from "@/lib/types";
+import type { DashboardConfig, DashboardQuery } from "@/lib/types";
+
+interface Stats {
+  totalEvents: number;
+  uniqueRepos: number;
+  uniqueContributors: number;
+}
 
 function formatNumber(n: number): string {
   if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + "M";
@@ -35,20 +41,8 @@ function toDateInput(iso: string): string {
   return `${y}-${m}-${day}`;
 }
 
-function statGridCols(count: number): string {
-  if (count <= 2) return "sm:grid-cols-2";
-  if (count <= 3) return "sm:grid-cols-3";
-  return "sm:grid-cols-4";
-}
-
-export function DashboardGrid({
-  queries,
-  dashboardConfig,
-}: {
-  queries: DashboardQuery[];
-  dashboardConfig: DashboardConfig;
-}) {
-  const [connection, setConnection] = useState<RawtreeConfig | null>(null);
+export function DashboardGrid({ queries, dashboardConfig }: { queries: DashboardQuery[]; dashboardConfig: DashboardConfig }) {
+  const [config, setConfig] = useState<RawtreeConfig | null>(null);
   const [results, setResults] = useState<Record<string, QueryResult | null>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState<Record<string, boolean>>({});
@@ -56,7 +50,7 @@ export function DashboardGrid({
 
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
-  const [stats, setStats] = useState<Record<string, number> | null>(null);
+  const [stats, setStats] = useState<Stats | null>(null);
   const [autoRefresh, setAutoRefresh] = useState(false);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -72,24 +66,18 @@ export function DashboardGrid({
       setErrors({});
       setResults({});
 
-      if (dashboardConfig.stats.length > 0) {
-        try {
-          const statsResult = await runQuery(
-            cfg.endpoint,
-            cfg.apiKey,
-            buildStatsQuery(dashboardConfig)
-          );
-          if (statsResult.data[0]) {
-            const row = statsResult.data[0];
-            const parsed: Record<string, number> = {};
-            for (const s of dashboardConfig.stats) {
-              parsed[s.key] = Number(row[s.key]) || 0;
-            }
-            setStats(parsed);
-          }
-        } catch {
-          // stats are non-critical
+      try {
+        const statsResult = await runQuery(cfg.endpoint, cfg.apiKey, buildStatsQuery(dashboardConfig));
+        if (statsResult.data[0]) {
+          const row = statsResult.data[0];
+          setStats({
+            totalEvents: Number(row.total_events) || 0,
+            uniqueRepos: Number(row.unique_repos) || 0,
+            uniqueContributors: Number(row.unique_contributors) || 0,
+          });
         }
+      } catch {
+        // stats are non-critical
       }
 
       await Promise.allSettled(
@@ -118,11 +106,7 @@ export function DashboardGrid({
   const initDashboard = useCallback(
     async (cfg: RawtreeConfig) => {
       try {
-        const rangeResult = await runQuery(
-          cfg.endpoint,
-          cfg.apiKey,
-          buildDateRangeQuery(dashboardConfig)
-        );
+        const rangeResult = await runQuery(cfg.endpoint, cfg.apiKey, buildDateRangeQuery(dashboardConfig));
         if (rangeResult.data[0]) {
           const row = rangeResult.data[0];
           setDateFrom(toDateInput(String(row.min_date)));
@@ -141,23 +125,23 @@ export function DashboardGrid({
       clearInterval(intervalRef.current);
       intervalRef.current = null;
     }
-    if (autoRefresh && connection) {
+    if (autoRefresh && config) {
       intervalRef.current = setInterval(() => {
-        executeQueries(connection, dateFrom || undefined, dateTo || undefined);
+        executeQueries(config, dateFrom || undefined, dateTo || undefined);
       }, 30_000);
     }
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [autoRefresh, connection, dateFrom, dateTo, executeQueries]);
+  }, [autoRefresh, config, dateFrom, dateTo, executeQueries]);
 
   function handleConnect(cfg: RawtreeConfig) {
-    setConnection(cfg);
+    setConfig(cfg);
     initDashboard(cfg);
   }
 
   function handleDisconnect() {
-    setConnection(null);
+    setConfig(null);
     setResults({});
     setErrors({});
     setStats(null);
@@ -169,39 +153,35 @@ export function DashboardGrid({
   function handleDateChange(from: string, to: string) {
     setDateFrom(from);
     setDateTo(to);
-    if (connection) executeQueries(connection, from, to);
+    if (config) executeQueries(config, from, to);
   }
 
   if (!mounted) return null;
 
-  if (!connection) {
+  if (!config) {
     return <ApiKeyForm onConnect={handleConnect} />;
   }
 
   return (
     <div>
       <DashboardToolbar
-        endpoint={connection.endpoint}
+        endpoint={config.endpoint}
         dateFrom={dateFrom}
         dateTo={dateTo}
         autoRefresh={autoRefresh}
         onDateChange={handleDateChange}
         onAutoRefreshToggle={() => setAutoRefresh((v) => !v)}
         onRefresh={() =>
-          executeQueries(connection, dateFrom || undefined, dateTo || undefined)
+          executeQueries(config, dateFrom || undefined, dateTo || undefined)
         }
         onDisconnect={handleDisconnect}
       />
 
-      {stats && dashboardConfig.stats.length > 0 && (
-        <div className={`mb-3 grid grid-cols-2 gap-3 ${statGridCols(dashboardConfig.stats.length)}`}>
-          {dashboardConfig.stats.map((s) => (
-            <StatCard
-              key={s.key}
-              label={s.label}
-              value={formatNumber(stats[s.key] ?? 0)}
-            />
-          ))}
+      {stats && (
+        <div className="mb-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
+          <StatCard label="Total Events" value={formatNumber(stats.totalEvents)} />
+          <StatCard label="Unique Repos" value={formatNumber(stats.uniqueRepos)} />
+          <StatCard label="Unique Contributors" value={formatNumber(stats.uniqueContributors)} />
         </div>
       )}
 

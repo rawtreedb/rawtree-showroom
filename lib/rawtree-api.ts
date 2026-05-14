@@ -29,28 +29,7 @@ export async function runQuery(
   return res.json();
 }
 
-const STORAGE_KEY = "rawtree-showroom-config";
-
 export interface RawtreeConfig {
   endpoint: string;
   apiKey: string;
-}
-
-export function loadConfig(): RawtreeConfig | null {
-  if (typeof window === "undefined") return null;
-  const raw = localStorage.getItem(STORAGE_KEY);
-  if (!raw) return null;
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return null;
-  }
-}
-
-export function saveConfig(config: RawtreeConfig) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
-}
-
-export function clearConfig() {
-  localStorage.removeItem(STORAGE_KEY);
 }

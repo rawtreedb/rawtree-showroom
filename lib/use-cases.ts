@@ -4,7 +4,7 @@ import type { UseCase } from "@/lib/types";
 const useCases: UseCase[] = [ghArchiveMongodbCdc];
 
 export function getAllUseCases(): UseCase[] {
-  return useCases.sort(
+  return useCases.toSorted(
     (a, b) =>
       new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()
   );

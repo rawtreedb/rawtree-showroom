@@ -18,7 +18,6 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
-import { cn } from "@/lib/utils";
 import { SqlHighlight } from "@/components/dashboard/sql-highlight";
 import type { DashboardQuery } from "@/lib/types";
 import type { QueryResult } from "@/lib/rawtree-api";

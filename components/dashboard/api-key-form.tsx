@@ -26,8 +26,9 @@ export function ApiKeyForm({
       </div>
       <h2 className="mb-2 text-xl font-semibold">Connect to RawTree</h2>
       <p className="mb-8 text-sm text-muted-foreground">
-        Enter your RawTree API key to load the live dashboard. Your key is
-        stored locally in this browser.
+        Enter your RawTree API key to load the live dashboard. Credentials are
+        kept in memory for this tab only and are not saved; refreshing the page
+        clears them.
       </p>
       <form onSubmit={handleSubmit} className="space-y-4 text-left">
         <div>

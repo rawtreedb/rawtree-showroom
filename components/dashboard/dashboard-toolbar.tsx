@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { RefreshCw, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -27,9 +27,17 @@ export function DashboardToolbar({
 }: DashboardToolbarProps) {
   const [localFrom, setLocalFrom] = useState(dateFrom);
   const [localTo, setLocalTo] = useState(dateTo);
+  const [prevDateFrom, setPrevDateFrom] = useState(dateFrom);
+  const [prevDateTo, setPrevDateTo] = useState(dateTo);
 
-  useEffect(() => { setLocalFrom(dateFrom); }, [dateFrom]);
-  useEffect(() => { setLocalTo(dateTo); }, [dateTo]);
+  if (dateFrom !== prevDateFrom) {
+    setPrevDateFrom(dateFrom);
+    setLocalFrom(dateFrom);
+  }
+  if (dateTo !== prevDateTo) {
+    setPrevDateTo(dateTo);
+    setLocalTo(dateTo);
+  }
 
   return (
     <div className="mb-3 flex flex-wrap items-center gap-3 rounded-xl border bg-card px-4 py-2">

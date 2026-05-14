@@ -5,44 +5,6 @@ import { Info } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { SetupGuide } from "@/lib/types";
 
-const BASH_KEYWORDS =
-  /\b(cd|cp|cat|echo|export|helm|kubectl|terraform|make|brew|git|direnv)\b/g;
-const BASH_FLAGS = /\s(--?\w[\w-]*)/g;
-const BASH_STRINGS = /(["'])(?:(?!\1).)*\1/g;
-const BASH_COMMENTS = /(#.*)/g;
-
-function highlightBash(code: string): string {
-  const lines = code.split("\n");
-  return lines
-    .map((line) => {
-      const trimmed = line.trimStart();
-      const indent = line.slice(0, line.length - trimmed.length);
-
-      if (trimmed.startsWith("#")) {
-        return `${indent}<span class="text-[oklch(0.55_0_0)]">${escapeHtml(line.trimStart())}</span>`;
-      }
-
-      let result = escapeHtml(trimmed);
-
-      result = result.replace(
-        /(&quot;|&#x27;)(?:(?!\1).)*\1/g,
-        (m) => `<span class="text-[oklch(0.75_0.12_140)]">${m}</span>`
-      );
-      result = result.replace(
-        /\b(cd|cp|cat|echo|export|helm|kubectl|terraform|make|brew|git|direnv|source|rawtree|mkdir|rm|set|set_sensitive)\b/g,
-        (m) => `<span class="text-[oklch(0.75_0.15_250)]">${m}</span>`
-      );
-      result = result.replace(
-        /\s(--?\w[\w-]*)/g,
-        (m, flag) =>
-          ` <span class="text-[oklch(0.7_0.1_60)]">${escapeHtml(flag)}</span>`
-      );
-
-      return `${indent}${result}`;
-    })
-    .join("\n");
-}
-
 function escapeHtml(str: string): string {
   return str
     .replace(/&/g, "&amp;")
@@ -52,8 +14,32 @@ function escapeHtml(str: string): string {
     .replace(/'/g, "&#x27;");
 }
 
-function addPrompts(code: string): string {
+function highlightCommand(raw: string): string {
+  let result = escapeHtml(raw);
+
+  result = result.replace(
+    /(&quot;|&#x27;)(?:(?!\1).)*\1/g,
+    (m) => `<span class="text-[oklch(0.75_0.12_140)]">${m}</span>`
+  );
+  result = result.replace(
+    /\b(cd|cp|cat|echo|export|helm|kubectl|terraform|make|brew|git|direnv|source|rawtree|mkdir|rm|set|set_sensitive)\b/g,
+    (m) => `<span class="text-[oklch(0.75_0.15_250)]">${m}</span>`
+  );
+  result = result.replace(
+    /\s(--?\w[\w-]*)/g,
+    (m, flag) =>
+      ` <span class="text-[oklch(0.7_0.1_60)]">${escapeHtml(flag)}</span>`
+  );
+
+  return result;
+}
+
+const PROMPT_SPAN = '<span class="select-none text-[oklch(0.55_0_0)]">$ </span>';
+const COMMENT_CLS = "text-[oklch(0.55_0_0)]";
+
+function formatBash(code: string): string {
   let inHeredoc = false;
+
   return code
     .split("\n")
     .map((line) => {
@@ -62,20 +48,23 @@ function addPrompts(code: string): string {
 
       if (inHeredoc) {
         if (trimmed === "EOF") inHeredoc = false;
-        return `  ${line}`;
+        return `  ${escapeHtml(line)}`;
       }
 
-      if (trimmed.startsWith("#")) return `  ${line}`;
+      if (trimmed.startsWith("#")) {
+        return `  <span class="${COMMENT_CLS}">${escapeHtml(trimmed)}</span>`;
+      }
 
       if (/<<'?EOF'?/.test(trimmed)) inHeredoc = true;
 
-      return `<span class="select-none text-[oklch(0.55_0_0)]">$ </span>${line}`;
+      const indent = line.slice(0, line.length - line.trimStart().length);
+      return `${PROMPT_SPAN}${indent}${highlightCommand(line.trimStart())}`;
     })
     .join("\n");
 }
 
 function CodeBlock({ code }: { code: string }) {
-  const highlighted = addPrompts(highlightBash(code));
+  const highlighted = formatBash(code);
   return (
     <pre className="code-surface overflow-x-auto px-4 py-3 text-[13px] leading-relaxed">
       <code dangerouslySetInnerHTML={{ __html: highlighted }} />
