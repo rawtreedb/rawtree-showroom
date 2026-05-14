@@ -174,7 +174,11 @@ export function DashboardGrid({ queries, dashboardConfig }: { queries: Dashboard
       />
 
       {stats && dashboardConfig.stats.length > 0 && (
-        <div className={`mb-3 grid grid-cols-2 gap-3 sm:grid-cols-${Math.min(dashboardConfig.stats.length, 4)}`}>
+        <div className={`mb-3 grid grid-cols-2 gap-3 ${
+          { 1: "sm:grid-cols-1", 2: "sm:grid-cols-2", 3: "sm:grid-cols-3", 4: "sm:grid-cols-4" }[
+            Math.min(dashboardConfig.stats.length, 4) as 1 | 2 | 3 | 4
+          ]
+        }`}>
           {dashboardConfig.stats.map((s) => (
             <StatCard key={s.key} label={s.label} value={formatNumber(stats[s.key] ?? 0)} />
           ))}
