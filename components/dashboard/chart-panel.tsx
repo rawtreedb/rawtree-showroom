@@ -16,9 +16,11 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
+  Legend,
   ResponsiveContainer,
 } from "recharts";
 import { SqlHighlight } from "@/components/dashboard/sql-highlight";
+import { WorldMapPanel } from "@/components/dashboard/world-map";
 import type { DashboardQuery } from "@/lib/types";
 import type { QueryResult } from "@/lib/rawtree-api";
 
@@ -56,20 +58,59 @@ function formatTick(value: string) {
   return value;
 }
 
+/**
+ * Pivots grouped rows into one column per unique group value.
+ * Input:  [{bucket:"10:00", rule:"A", blocks:5}, {bucket:"10:00", rule:"B", blocks:3}]
+ * Output: [{bucket:"10:00", A:5, B:3}]
+ * Returns { data, seriesKeys } where seriesKeys are the discovered group names.
+ */
+function pivotByGroup(
+  rows: Record<string, unknown>[],
+  xKey: string,
+  groupKey: string,
+  valueKey: string
+): { data: Record<string, unknown>[]; seriesKeys: string[] } {
+  const bucketMap = new Map<string, Record<string, unknown>>();
+  const groupSet = new Set<string>();
+  for (const row of rows) {
+    const x = String(row[xKey] ?? "");
+    const g = String(row[groupKey] ?? "");
+    const v = row[valueKey];
+    if (!g) continue;
+    groupSet.add(g);
+    let bucket = bucketMap.get(x);
+    if (!bucket) {
+      bucket = { [xKey]: row[xKey] };
+      bucketMap.set(x, bucket);
+    }
+    bucket[g] = v;
+  }
+  return { data: Array.from(bucketMap.values()), seriesKeys: Array.from(groupSet) };
+}
+
 function ChartRenderer({
   query,
-  data,
+  data: rawData,
 }: {
   query: DashboardQuery;
   data: Record<string, unknown>[];
 }) {
   const { chartType, chartConfig } = query;
   const color = chartConfig.colors?.[0] ?? "var(--color-primary)";
+  const h = query.chartHeight ?? 200;
+
+  let data = rawData;
+  let effectiveYKeys = chartConfig.yKeys;
+  if (query.groupKey && chartConfig.yKeys.length === 1) {
+    const pivoted = pivotByGroup(rawData, chartConfig.xKey, query.groupKey, chartConfig.yKeys[0]);
+    data = pivoted.data;
+    effectiveYKeys = pivoted.seriesKeys;
+  }
 
   if (chartType === "area") {
     return (
-      <ResponsiveContainer width="100%" height={200}>
-        <AreaChart data={data}>
+      <ResponsiveContainer width="100%" height={h}>
+        <AreaChart data={data} margin={query.showLegend ? { right: 120 } : undefined}>
           <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
           <XAxis
             dataKey={chartConfig.xKey}
@@ -79,13 +120,16 @@ function ChartRenderer({
           />
           <YAxis tick={{ fontSize: 9 }} className="text-muted-foreground" width={40} />
           <Tooltip contentStyle={TOOLTIP_STYLE} />
-          {chartConfig.yKeys.map((key, i) => (
+          {query.showLegend && (
+            <Legend layout="vertical" align="right" verticalAlign="middle" wrapperStyle={{ fontSize: 9, right: 0 }} />
+          )}
+          {effectiveYKeys.map((key, i) => (
             <Area
               key={key}
               type="monotone"
               dataKey={key}
-              stroke={chartConfig.colors?.[i] ?? color}
-              fill={chartConfig.colors?.[i] ?? color}
+              stroke={chartConfig.colors?.[i % (chartConfig.colors?.length ?? 1)] ?? color}
+              fill={chartConfig.colors?.[i % (chartConfig.colors?.length ?? 1)] ?? color}
               fillOpacity={0.15}
               strokeWidth={1.5}
             />
@@ -99,7 +143,7 @@ function ChartRenderer({
     const labelKey = chartConfig.yKeys[0];
     const valueKey = chartConfig.xKey;
     return (
-      <ResponsiveContainer width="100%" height={200}>
+      <ResponsiveContainer width="100%" height={h}>
         <BarChart data={data} layout="vertical" margin={{ left: 60 }}>
           <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
           <XAxis type="number" tick={{ fontSize: 9 }} />
@@ -118,9 +162,13 @@ function ChartRenderer({
   }
 
   if (chartType === "bar") {
+    const hasCategoricalColors =
+      effectiveYKeys.length === 1 &&
+      (chartConfig.colors?.length ?? 0) > 1;
+
     return (
-      <ResponsiveContainer width="100%" height={200}>
-        <BarChart data={data}>
+      <ResponsiveContainer width="100%" height={h}>
+        <BarChart data={data} margin={query.showLegend ? { right: 120 } : undefined}>
           <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
           <XAxis
             dataKey={chartConfig.xKey}
@@ -129,14 +177,55 @@ function ChartRenderer({
           />
           <YAxis tick={{ fontSize: 9 }} width={40} />
           <Tooltip contentStyle={TOOLTIP_STYLE} />
-          {chartConfig.yKeys.map((key, i) => (
-            <Bar
-              key={key}
-              dataKey={key}
-              fill={chartConfig.colors?.[i] ?? color}
-              radius={[3, 3, 0, 0]}
+          {query.showLegend && !hasCategoricalColors && (
+            <Legend layout="vertical" align="right" verticalAlign="middle" wrapperStyle={{ fontSize: 9, right: 0 }} />
+          )}
+          {query.showLegend && hasCategoricalColors && (
+            <Legend
+              layout="vertical"
+              align="right"
+              verticalAlign="middle"
+              wrapperStyle={{ fontSize: 9, right: 0 }}
+              content={() => (
+                <ul style={{ listStyle: "none", padding: 0, margin: 0, fontSize: 9 }}>
+                  {data.map((row, i) => (
+                    <li key={i} style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 2 }}>
+                      <span
+                        style={{
+                          width: 8,
+                          height: 8,
+                          borderRadius: 2,
+                          background: chartConfig.colors?.[i % (chartConfig.colors?.length ?? 1)] ?? color,
+                          flexShrink: 0,
+                        }}
+                      />
+                      {String(row[chartConfig.xKey] ?? "")}
+                    </li>
+                  ))}
+                </ul>
+              )}
             />
-          ))}
+          )}
+          {hasCategoricalColors ? (
+            <Bar dataKey={effectiveYKeys[0]} radius={[3, 3, 0, 0]}>
+              {data.map((_, i) => (
+                <Cell
+                  key={i}
+                  fill={chartConfig.colors?.[i % (chartConfig.colors?.length ?? 1)] ?? color}
+                />
+              ))}
+            </Bar>
+          ) : (
+            effectiveYKeys.map((key, i) => (
+              <Bar
+                key={key}
+                dataKey={key}
+                stackId={query.stacked ? "s" : undefined}
+                fill={chartConfig.colors?.[i % (chartConfig.colors?.length ?? 1)] ?? color}
+                radius={query.stacked ? undefined : [3, 3, 0, 0]}
+              />
+            ))
+          )}
         </BarChart>
       </ResponsiveContainer>
     );
@@ -144,8 +233,8 @@ function ChartRenderer({
 
   if (chartType === "line") {
     return (
-      <ResponsiveContainer width="100%" height={200}>
-        <LineChart data={data}>
+      <ResponsiveContainer width="100%" height={h}>
+        <LineChart data={data} margin={query.showLegend ? { right: 120 } : undefined}>
           <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
           <XAxis
             dataKey={chartConfig.xKey}
@@ -154,12 +243,15 @@ function ChartRenderer({
           />
           <YAxis tick={{ fontSize: 9 }} width={40} />
           <Tooltip contentStyle={TOOLTIP_STYLE} />
-          {chartConfig.yKeys.map((key, i) => (
+          {query.showLegend && (
+            <Legend layout="vertical" align="right" verticalAlign="middle" wrapperStyle={{ fontSize: 9, right: 0 }} />
+          )}
+          {effectiveYKeys.map((key, i) => (
             <Line
               key={key}
               type="monotone"
               dataKey={key}
-              stroke={chartConfig.colors?.[i] ?? color}
+              stroke={chartConfig.colors?.[i % (chartConfig.colors?.length ?? 1)] ?? color}
               strokeWidth={1.5}
               dot={false}
             />
@@ -173,7 +265,7 @@ function ChartRenderer({
     const nameKey = chartConfig.yKeys[0];
     const valueKey = chartConfig.xKey;
     return (
-      <ResponsiveContainer width="100%" height={200}>
+      <ResponsiveContainer width="100%" height={h}>
         <PieChart>
           <Pie
             data={data}
@@ -199,6 +291,20 @@ function ChartRenderer({
           <Tooltip contentStyle={TOOLTIP_STYLE} />
         </PieChart>
       </ResponsiveContainer>
+    );
+  }
+
+  if (chartType === "world-map") {
+    const countryKey = chartConfig.yKeys[0];
+    const valKey = chartConfig.xKey;
+    return (
+      <WorldMapPanel
+        data={data}
+        countryKey={countryKey}
+        valueKey={valKey}
+        color={chartConfig.colors?.[0]}
+        height={h}
+      />
     );
   }
 
@@ -251,18 +357,18 @@ export function ChartPanel({
       </div>
 
       {showSql ? (
-        <div className="overflow-auto p-2" style={{ maxHeight: "240px" }}>
+        <div className="overflow-auto p-2" style={{ maxHeight: `${(query.chartHeight ?? 200) + 40}px` }}>
           <SqlHighlight sql={query.sql} />
         </div>
       ) : (
         <div className="p-2">
           {loading && (
-            <div className="flex h-[200px] items-center justify-center">
+            <div className="flex items-center justify-center" style={{ height: query.chartHeight ?? 200 }}>
               <div className="size-5 animate-spin rounded-full border-2 border-muted-foreground border-t-transparent" />
             </div>
           )}
           {error && (
-            <div className="flex h-[200px] items-center justify-center px-3">
+            <div className="flex items-center justify-center px-3" style={{ height: query.chartHeight ?? 200 }}>
               <p className="text-center text-xs text-destructive">{error}</p>
             </div>
           )}

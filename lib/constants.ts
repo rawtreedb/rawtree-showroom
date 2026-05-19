@@ -6,6 +6,6 @@ export const SITE_URL = "https://showroom.rawtree.com";
 export const LINKS = {
   rawtree: "https://rawtree.com",
   docs: "https://rawtree.com/docs",
-  github: "https://github.com/rawtree",
+  github: "https://github.com/rawtreedb",
   console: "https://console.rawtree.com",
 };

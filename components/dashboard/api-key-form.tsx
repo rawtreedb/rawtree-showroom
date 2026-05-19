@@ -7,8 +7,10 @@ import type { RawtreeConfig } from "@/lib/rawtree-api";
 
 export function ApiKeyForm({
   onConnect,
+  onDemo,
 }: {
   onConnect: (config: RawtreeConfig) => void;
+  onDemo?: () => void;
 }) {
   const [endpoint, setEndpoint] = useState("https://api.rawtree.com");
   const [apiKey, setApiKey] = useState("");
@@ -56,9 +58,24 @@ export function ApiKeyForm({
           />
         </div>
         <Button className="w-full" type="submit">
-          Connect & Load Dashboard
+          Load Dashboard with your data
         </Button>
       </form>
+      {onDemo && (
+        <div className="mt-6">
+          <div className="relative mb-4">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t" />
+            </div>
+            <div className="relative flex justify-center text-xs uppercase">
+              <span className="bg-background px-2 text-muted-foreground">or</span>
+            </div>
+          </div>
+          <Button variant="outline" className="w-full" onClick={onDemo}>
+            See sample dashboard
+          </Button>
+        </div>
+      )}
     </div>
   );
 }
