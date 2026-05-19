@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import type { Metadata } from "next";
-import { ExternalLink, ArrowLeft } from "lucide-react";
+import { ExternalLink, ArrowLeft, ArrowRight } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ArchitectureDiagram } from "@/components/use-case/architecture-diagram";
@@ -91,6 +91,16 @@ export default async function UseCaseDetailPage({
           edges={useCase.architecture.edges}
         />
         <SetupSteps guides={useCase.setupGuides} />
+
+        <div className="flex justify-center pt-4">
+          <Link
+            href={`/use-cases/${useCase.slug}/dashboard`}
+            className={buttonVariants({ size: "lg" })}
+          >
+            Go to the dashboard
+            <ArrowRight className="ml-2 size-4" />
+          </Link>
+        </div>
       </div>
     </div>
   );

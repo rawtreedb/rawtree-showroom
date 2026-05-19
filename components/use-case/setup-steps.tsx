@@ -121,24 +121,41 @@ export function SetupSteps({ guides }: { guides: SetupGuide[] }) {
               </h3>
               <div className="ml-9 space-y-3">
                 <p className="text-sm text-muted-foreground">{step.content}</p>
-                {step.notice && (
-                  <div className="flex gap-3 rounded-lg border border-primary/20 bg-primary/5 px-4 py-3">
-                    <Info className="mt-0.5 size-4 shrink-0 text-primary" />
-                    <div className="text-sm">
-                      <p className="text-foreground">{step.notice.text}</p>
-                      {step.notice.link && (
-                        <a
-                          href={step.notice.link.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="mt-1 inline-block text-primary underline underline-offset-2 hover:text-primary/80"
-                        >
-                          {step.notice.link.label} &rarr;
-                        </a>
+                {step.notice && (() => {
+                  const isAws = step.notice.link?.url?.includes("aws.amazon.com");
+                  return (
+                    <div className={cn(
+                      "flex gap-3 rounded-lg border px-4 py-3",
+                      isAws
+                        ? "border-[#FF9900]/20 bg-[#FF9900]/5"
+                        : "border-primary/20 bg-primary/5"
+                    )}>
+                      {isAws ? (
+                        <img src="/aws.webp" alt="AWS" className="mt-0.5 size-4 shrink-0" />
+                      ) : (
+                        <Info className="mt-0.5 size-4 shrink-0 text-primary" />
                       )}
+                      <div className="text-sm">
+                        <p className="text-foreground">{step.notice.text}</p>
+                        {step.notice.link && (
+                          <a
+                            href={step.notice.link.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className={cn(
+                              "mt-1 inline-block underline underline-offset-2",
+                              isAws
+                                ? "text-[#C27400] hover:text-[#FF9900]"
+                                : "text-primary hover:text-primary/80"
+                            )}
+                          >
+                            {step.notice.link.label} &rarr;
+                          </a>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                )}
+                  );
+                })()}
                 {step.codeBlock && <CodeBlock code={step.codeBlock.code} />}
               </div>
             </div>

@@ -7,6 +7,7 @@ import { StatCard } from "@/components/dashboard/stat-card";
 import { DashboardToolbar } from "@/components/dashboard/dashboard-toolbar";
 import {
   runQuery,
+  runDemoQuery,
   type RawtreeConfig,
   type QueryResult,
 } from "@/lib/rawtree-api";
@@ -39,6 +40,7 @@ function toDateInput(iso: string): string {
 
 export function DashboardGrid({ queries, dashboardConfig }: { queries: DashboardQuery[]; dashboardConfig: DashboardConfig }) {
   const [config, setConfig] = useState<RawtreeConfig | null>(null);
+  const [demo, setDemo] = useState(false);
   const [results, setResults] = useState<Record<string, QueryResult | null>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState<Record<string, boolean>>({});
@@ -54,8 +56,14 @@ export function DashboardGrid({ queries, dashboardConfig }: { queries: Dashboard
     setMounted(true);
   }, []);
 
+  const query = useCallback(
+    (sql: string, cfg?: RawtreeConfig | null) =>
+      cfg ? runQuery(cfg.endpoint, cfg.apiKey, sql) : runDemoQuery(sql),
+    []
+  );
+
   const executeQueries = useCallback(
-    async (cfg: RawtreeConfig, from?: string, to?: string) => {
+    async (cfg: RawtreeConfig | null, from?: string, to?: string) => {
       const newLoading: Record<string, boolean> = {};
       for (const q of queries) newLoading[q.id] = true;
       setLoading(newLoading);
@@ -63,7 +71,7 @@ export function DashboardGrid({ queries, dashboardConfig }: { queries: Dashboard
       setResults({});
 
       try {
-        const statsResult = await runQuery(cfg.endpoint, cfg.apiKey, buildStatsQuery(dashboardConfig));
+        const statsResult = await query(buildStatsQuery(dashboardConfig), cfg);
         if (statsResult.data[0]) {
           const row = statsResult.data[0];
           const parsed: Stats = {};
@@ -83,7 +91,7 @@ export function DashboardGrid({ queries, dashboardConfig }: { queries: Dashboard
               !q.skipDateFilter && from && to
                 ? injectDateFilter(q.sql, from, to, dashboardConfig.dateExpression)
                 : q.sql;
-            const result = await runQuery(cfg.endpoint, cfg.apiKey, sql);
+            const result = await query(sql, cfg);
             setResults((prev) => ({ ...prev, [q.id]: result }));
           } catch (e) {
             setErrors((prev) => ({
@@ -96,13 +104,13 @@ export function DashboardGrid({ queries, dashboardConfig }: { queries: Dashboard
         })
       );
     },
-    [queries, dashboardConfig]
+    [queries, dashboardConfig, query]
   );
 
   const initDashboard = useCallback(
-    async (cfg: RawtreeConfig) => {
+    async (cfg: RawtreeConfig | null) => {
       try {
-        const rangeResult = await runQuery(cfg.endpoint, cfg.apiKey, buildDateRangeQuery(dashboardConfig));
+        const rangeResult = await query(buildDateRangeQuery(dashboardConfig), cfg);
         if (rangeResult.data[0]) {
           const row = rangeResult.data[0];
           setDateFrom(toDateInput(String(row.min_date)));
@@ -113,7 +121,7 @@ export function DashboardGrid({ queries, dashboardConfig }: { queries: Dashboard
       }
       executeQueries(cfg);
     },
-    [executeQueries, dashboardConfig]
+    [executeQueries, dashboardConfig, query]
   );
 
   useEffect(() => {
@@ -121,7 +129,8 @@ export function DashboardGrid({ queries, dashboardConfig }: { queries: Dashboard
       clearInterval(intervalRef.current);
       intervalRef.current = null;
     }
-    if (autoRefresh && config) {
+    const active = config || demo;
+    if (autoRefresh && active) {
       intervalRef.current = setInterval(() => {
         executeQueries(config, dateFrom || undefined, dateTo || undefined);
       }, 30_000);
@@ -129,15 +138,21 @@ export function DashboardGrid({ queries, dashboardConfig }: { queries: Dashboard
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [autoRefresh, config, dateFrom, dateTo, executeQueries]);
+  }, [autoRefresh, config, demo, dateFrom, dateTo, executeQueries]);
 
   function handleConnect(cfg: RawtreeConfig) {
     setConfig(cfg);
     initDashboard(cfg);
   }
 
+  function handleDemo() {
+    setDemo(true);
+    initDashboard(null);
+  }
+
   function handleDisconnect() {
     setConfig(null);
+    setDemo(false);
     setResults({});
     setErrors({});
     setStats(null);
@@ -149,26 +164,26 @@ export function DashboardGrid({ queries, dashboardConfig }: { queries: Dashboard
   function handleDateChange(from: string, to: string) {
     setDateFrom(from);
     setDateTo(to);
-    if (config) executeQueries(config, from, to);
+    if (config || demo) executeQueries(config ?? null, from, to);
   }
 
   if (!mounted) return null;
 
-  if (!config) {
-    return <ApiKeyForm onConnect={handleConnect} />;
+  if (!config && !demo) {
+    return <ApiKeyForm onConnect={handleConnect} onDemo={handleDemo} />;
   }
 
   return (
     <div>
       <DashboardToolbar
-        endpoint={config.endpoint}
+        endpoint={demo ? "Sample Data" : config!.endpoint}
         dateFrom={dateFrom}
         dateTo={dateTo}
         autoRefresh={autoRefresh}
         onDateChange={handleDateChange}
         onAutoRefreshToggle={() => setAutoRefresh((v) => !v)}
         onRefresh={() =>
-          executeQueries(config, dateFrom || undefined, dateTo || undefined)
+          executeQueries(config ?? null, dateFrom || undefined, dateTo || undefined)
         }
         onDisconnect={handleDisconnect}
       />
@@ -185,15 +200,24 @@ export function DashboardGrid({ queries, dashboardConfig }: { queries: Dashboard
         </div>
       )}
 
-      <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-6">
         {queries.map((q) => (
-          <ChartPanel
+          <div
             key={q.id}
-            query={q}
-            result={results[q.id] ?? null}
-            error={errors[q.id] ?? null}
-            loading={loading[q.id] ?? false}
-          />
+            className={
+              q.colSpan === 3 ? "md:col-span-2 lg:col-span-6" :
+              q.colSpan === 4 ? "md:col-span-2 lg:col-span-4" :
+              q.colSpan === 2 ? "md:col-span-2 lg:col-span-3" :
+              "lg:col-span-2"
+            }
+          >
+            <ChartPanel
+              query={q}
+              result={results[q.id] ?? null}
+              error={errors[q.id] ?? null}
+              loading={loading[q.id] ?? false}
+            />
+          </div>
         ))}
       </div>
     </div>

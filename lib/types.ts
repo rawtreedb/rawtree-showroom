@@ -1,7 +1,7 @@
 export interface ArchitectureNode {
   id: string;
   label: string;
-  type: "source" | "database" | "connector" | "platform" | "dashboard" | "script";
+  type: "source" | "database" | "connector" | "platform" | "dashboard" | "script" | "firewall";
   description?: string;
 }
 
@@ -43,13 +43,22 @@ export interface DashboardQuery {
   title: string;
   description: string;
   sql: string;
-  chartType: "area" | "bar" | "horizontal-bar" | "line" | "pie";
+  chartType: "area" | "bar" | "horizontal-bar" | "line" | "pie" | "world-map";
   chartConfig: {
     xKey: string;
     yKeys: string[];
     colors?: string[];
   };
   skipDateFilter?: boolean;
+  colSpan?: 1 | 2 | 3 | 4;
+  /** When set, pivots rows (xKey, groupKey, yKeys[0]) into one series per unique groupKey value. */
+  groupKey?: string;
+  /** Show a legend on the right side of the chart. */
+  showLegend?: boolean;
+  /** Override the default chart height in pixels (default 200). */
+  chartHeight?: number;
+  /** Stack bars instead of grouping them side by side. */
+  stacked?: boolean;
 }
 
 export interface UseCase {

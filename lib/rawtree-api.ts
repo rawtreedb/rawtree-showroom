@@ -29,6 +29,21 @@ export async function runQuery(
   return res.json();
 }
 
+export async function runDemoQuery(sql: string): Promise<QueryResult> {
+  const res = await fetch("/api/demo-query", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ sql }),
+  });
+
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Query failed (${res.status}): ${body}`);
+  }
+
+  return res.json();
+}
+
 export interface RawtreeConfig {
   endpoint: string;
   apiKey: string;
