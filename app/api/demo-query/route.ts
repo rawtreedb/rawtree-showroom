@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const DEMO_ENDPOINT = process.env.RAWTREE_DEMO_ENDPOINT;
-const DEMO_API_KEY = process.env.RAWTREE_DEMO_API_KEY;
-
 export async function POST(req: NextRequest) {
+  const DEMO_ENDPOINT = process.env.RAWTREE_DEMO_ENDPOINT;
+  const DEMO_API_KEY = process.env.RAWTREE_DEMO_API_KEY;
+
   if (!DEMO_ENDPOINT || !DEMO_API_KEY) {
     return NextResponse.json(
       { error: "Demo mode is not configured" },
