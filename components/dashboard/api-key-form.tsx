@@ -53,7 +53,7 @@ export function ApiKeyForm({
             value={apiKey}
             onChange={(e) => setApiKey(e.target.value)}
             className="w-full rounded-md border bg-background px-3 py-2 text-sm font-mono outline-none focus:border-primary focus:ring-1 focus:ring-primary"
-            placeholder="rw_..."
+            placeholder="rt_..."
             required
           />
         </div>

@@ -1,8 +1,13 @@
 import { ghArchiveMongodbCdc } from "@/content/use-cases/gh-archive-mongodb-cdc";
 import { cloudfrontWafSecurity } from "@/content/use-cases/cloudfront-waf-security";
+import { supabaseSuperstoreCdc } from "@/content/use-cases/supabase-superstore-cdc";
 import type { UseCase } from "@/lib/types";
 
-const useCases: UseCase[] = [ghArchiveMongodbCdc, cloudfrontWafSecurity];
+const useCases: UseCase[] = [
+  ghArchiveMongodbCdc,
+  cloudfrontWafSecurity,
+  supabaseSuperstoreCdc,
+];
 
 export function getAllUseCases(): UseCase[] {
   return useCases.toSorted(

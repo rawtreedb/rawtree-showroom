@@ -45,7 +45,7 @@ export default async function DashboardPage({
         <h1 className="text-sm font-semibold">Live Dashboard</h1>
       </div>
 
-      <DashboardGrid queries={useCase.dashboardQueries} dashboardConfig={useCase.dashboardConfig} />
+      <DashboardGrid queries={useCase.dashboardQueries} dashboardConfig={useCase.dashboardConfig} slug={useCase.slug} />
     </div>
   );
 }

@@ -283,7 +283,14 @@ const WAF_CTE = `WITH events AS (
   SELECT *,
     toString(\`labels\`) AS labels_str,
     toString(\`ruleGroupList\`) AS ruleGroupList_str
-  FROM waf_logs
+  FROM (
+    SELECT *,
+      ROW_NUMBER() OVER (
+        PARTITION BY toString(\`httpRequest.requestId\`)
+        ORDER BY inserted_at DESC
+      ) AS _rn
+    FROM waf_logs
+  ) WHERE _rn = 1
 )`;
 
 export const wafSecurityQueries: DashboardQuery[] = [
@@ -367,20 +374,20 @@ LIMIT 30`,
     id: "waf-attack-types",
     title: "Attack Types",
     description: "Types of attacks identified in blocked requests",
-    sql: `SELECT
+    sql: `${WAF_CTE}
+SELECT
     arrayElement(
       splitByChar(':', JSONExtractString(lbl, 'name')),
       -1
     ) AS attack_type,
     count() AS requests
-FROM waf_logs
+FROM events
 ARRAY JOIN JSONExtractArrayRaw(ifNull(toJSONString(\`labels\`), '[]')) AS lbl
 WHERE \`action\` = 'BLOCK'
   AND JSONExtractString(lbl, 'name') != ''
 GROUP BY attack_type
 ORDER BY requests DESC
 LIMIT 10`,
-    skipDateFilter: true,
     chartType: "bar",
     chartConfig: {
       xKey: "attack_type",
@@ -464,20 +471,20 @@ LIMIT 10`,
     id: "waf-attack-categories",
     title: "Attack Categories",
     description: "Attack labels from WAF managed rules",
-    sql: `SELECT
+    sql: `${WAF_CTE}
+SELECT
     arrayElement(
       splitByChar(':', JSONExtractString(lbl, 'name')),
       -1
     ) AS label_name,
     count() AS cnt
-FROM waf_logs
+FROM events
 ARRAY JOIN JSONExtractArrayRaw(ifNull(toJSONString(\`labels\`), '[]')) AS lbl
 WHERE \`action\` = 'BLOCK'
   AND JSONExtractString(lbl, 'name') != ''
 GROUP BY label_name
 ORDER BY cnt DESC
 LIMIT 10`,
-    skipDateFilter: true,
     chartType: "pie",
     chartConfig: {
       xKey: "cnt",
@@ -692,5 +699,390 @@ LIMIT 10`,
       xKey: "cnt",
       yKeys: ["method"],
     },
+  },
+];
+
+// ---------------------------------------------------------------------------
+// Supabase Superstore CDC Dashboard
+// ---------------------------------------------------------------------------
+
+const SUPERSTORE_TABLE = "public_superstore__sales__data";
+
+// Converts Postgres LSN text such as '1/F20001D8' into a sortable integer and
+// pairs it with the transaction ordinal, so CDC events for the same source row
+// can be ordered. Mirrors the query pattern documented in the supabase-etl
+// example README (rawtreedb/examples → postgres/supabase-etl).
+const SUPERSTORE_EVENT_ORDER = `tuple(
+          reinterpretAsUInt64(reverse(unhex(concat(
+            leftPad(splitByChar('/', toString(_etl_commit_lsn))[1], 8, '0'),
+            leftPad(splitByChar('/', toString(_etl_commit_lsn))[2], 8, '0')
+          )))),
+          toUInt64OrZero(toString(_etl_tx_ordinal))
+        )`;
+
+// The source dataset stores dates as DD/MM/YYYY text.
+const SUPERSTORE_ORDER_DATE =
+  "parseDateTimeOrNull(toString(`Order Date`), '%d/%m/%Y')";
+const SUPERSTORE_SHIP_DATE =
+  "parseDateTimeOrNull(toString(`Ship Date`), '%d/%m/%Y')";
+const SUPERSTORE_SALES = "toFloat64OrZero(toString(`Sales`))";
+
+// Reconstructs the current table state from the append-only CDC event log:
+// keep only row-level events, take the latest event per primary key, and drop
+// keys whose latest event is a delete.
+const SUPERSTORE_CTE = `WITH events AS (
+  SELECT * FROM (
+    SELECT *,
+      ROW_NUMBER() OVER (
+        PARTITION BY toString(\`Row ID\`)
+        ORDER BY ${SUPERSTORE_EVENT_ORDER} DESC
+      ) AS _rn
+    FROM ${SUPERSTORE_TABLE}
+    WHERE toString(_etl_op) IN ('copy', 'insert', 'update', 'delete')
+  ) WHERE _rn = 1 AND toString(_etl_op) != 'delete'
+)`;
+
+export const supabaseSuperstoreQueries: DashboardQuery[] = [
+  // Row 1 — two half-width time series (Part 2 of the Kaggle notebook)
+  {
+    id: "superstore-monthly-sales",
+    title: "Monthly Sales Trend",
+    description: "Total revenue per month across the order history",
+    sql: `${SUPERSTORE_CTE}
+SELECT
+    toStartOfMonth(${SUPERSTORE_ORDER_DATE}) AS bucket,
+    round(sum(${SUPERSTORE_SALES})) AS sales
+FROM events
+GROUP BY bucket
+ORDER BY bucket`,
+    chartType: "area",
+    chartConfig: {
+      xKey: "bucket",
+      yKeys: ["sales"],
+      colors: ["var(--color-primary)"],
+    },
+    colSpan: 2,
+  },
+  {
+    id: "superstore-monthly-sales-by-category",
+    title: "Monthly Sales by Category",
+    description: "Revenue trend per product category",
+    sql: `${SUPERSTORE_CTE}
+SELECT
+    toStartOfMonth(${SUPERSTORE_ORDER_DATE}) AS bucket,
+    toString(\`Category\`) AS category,
+    round(sum(${SUPERSTORE_SALES})) AS sales
+FROM events
+GROUP BY bucket, category
+ORDER BY bucket`,
+    chartType: "line",
+    chartConfig: {
+      xKey: "bucket",
+      yKeys: ["sales"],
+      colors: [
+        "oklch(0.6 0.2 265)",
+        "oklch(0.65 0.18 150)",
+        "oklch(0.7 0.18 85)",
+      ],
+    },
+    groupKey: "category",
+    colSpan: 2,
+    showLegend: true,
+  },
+
+  // Row 2 — customer analysis
+  {
+    id: "superstore-sales-by-segment",
+    title: "Sales by Customer Segment",
+    description: "Revenue share of Consumer, Corporate, and Home Office",
+    sql: `${SUPERSTORE_CTE}
+SELECT
+    toString(\`Segment\`) AS segment,
+    round(sum(${SUPERSTORE_SALES})) AS sales
+FROM events
+GROUP BY segment
+ORDER BY sales DESC`,
+    chartType: "pie",
+    chartConfig: {
+      xKey: "sales",
+      yKeys: ["segment"],
+    },
+  },
+  {
+    id: "superstore-top-customers-by-sales",
+    title: "Top 10 Customers by Sales",
+    description: "Customers generating the most revenue",
+    sql: `${SUPERSTORE_CTE}
+SELECT
+    toString(\`Customer Name\`) AS customer,
+    round(sum(${SUPERSTORE_SALES})) AS sales
+FROM events
+GROUP BY customer
+ORDER BY sales DESC
+LIMIT 10`,
+    chartType: "horizontal-bar",
+    chartConfig: {
+      xKey: "sales",
+      yKeys: ["customer"],
+      colors: ["var(--color-primary)"],
+    },
+  },
+  {
+    id: "superstore-top-customers-by-orders",
+    title: "Top 10 Frequent Customers",
+    description: "Customers who placed the most orders",
+    sql: `${SUPERSTORE_CTE}
+SELECT
+    toString(\`Customer Name\`) AS customer,
+    uniq(toString(\`Order ID\`)::String) AS orders
+FROM events
+GROUP BY customer
+ORDER BY orders DESC
+LIMIT 10`,
+    chartType: "horizontal-bar",
+    chartConfig: {
+      xKey: "orders",
+      yKeys: ["customer"],
+      colors: ["oklch(0.6 0.2 265)"],
+    },
+  },
+
+  // Row 3 — geographic analysis
+  {
+    id: "superstore-sales-by-region",
+    title: "Sales by Region",
+    description: "Revenue share across the four US regions",
+    sql: `${SUPERSTORE_CTE}
+SELECT
+    toString(\`Region\`) AS region,
+    round(sum(${SUPERSTORE_SALES})) AS sales
+FROM events
+GROUP BY region
+ORDER BY sales DESC`,
+    chartType: "pie",
+    chartConfig: {
+      xKey: "sales",
+      yKeys: ["region"],
+    },
+  },
+  {
+    id: "superstore-top-states",
+    title: "Top 10 States by Sales",
+    description: "States generating the most revenue",
+    sql: `${SUPERSTORE_CTE}
+SELECT
+    toString(\`State\`) AS state,
+    round(sum(${SUPERSTORE_SALES})) AS sales
+FROM events
+GROUP BY state
+ORDER BY sales DESC
+LIMIT 10`,
+    chartType: "horizontal-bar",
+    chartConfig: {
+      xKey: "sales",
+      yKeys: ["state"],
+      colors: ["oklch(0.65 0.18 150)"],
+    },
+  },
+  {
+    id: "superstore-top-cities",
+    title: "Top 10 Cities by Sales",
+    description: "Cities generating the most revenue",
+    sql: `${SUPERSTORE_CTE}
+SELECT
+    toString(\`City\`) AS city,
+    round(sum(${SUPERSTORE_SALES})) AS sales
+FROM events
+GROUP BY city
+ORDER BY sales DESC
+LIMIT 10`,
+    chartType: "horizontal-bar",
+    chartConfig: {
+      xKey: "sales",
+      yKeys: ["city"],
+      colors: ["oklch(0.7 0.12 220)"],
+    },
+  },
+
+  // Row 4 — product analysis
+  {
+    id: "superstore-sales-by-category",
+    title: "Sales by Category",
+    description: "Revenue share of Furniture, Office Supplies, and Technology",
+    sql: `${SUPERSTORE_CTE}
+SELECT
+    toString(\`Category\`) AS category,
+    round(sum(${SUPERSTORE_SALES})) AS sales
+FROM events
+GROUP BY category
+ORDER BY sales DESC`,
+    chartType: "pie",
+    chartConfig: {
+      xKey: "sales",
+      yKeys: ["category"],
+    },
+  },
+  {
+    id: "superstore-sales-by-subcategory",
+    title: "Sales by Sub-Category",
+    description: "Revenue across all product sub-categories",
+    sql: `${SUPERSTORE_CTE}
+SELECT
+    toString(\`Sub-Category\`) AS subcategory,
+    round(sum(${SUPERSTORE_SALES})) AS sales
+FROM events
+GROUP BY subcategory
+ORDER BY sales DESC
+LIMIT 17`,
+    chartType: "horizontal-bar",
+    chartConfig: {
+      xKey: "sales",
+      yKeys: ["subcategory"],
+      colors: ["oklch(0.55 0.2 280)"],
+    },
+  },
+  {
+    id: "superstore-top-products",
+    title: "Top 10 Products by Sales",
+    description: "Best-selling products by revenue",
+    sql: `${SUPERSTORE_CTE}
+SELECT
+    toString(\`Product Name\`) AS product,
+    round(sum(${SUPERSTORE_SALES})) AS sales
+FROM events
+GROUP BY product
+ORDER BY sales DESC
+LIMIT 10`,
+    chartType: "horizontal-bar",
+    chartConfig: {
+      xKey: "sales",
+      yKeys: ["product"],
+      colors: ["oklch(0.65 0.15 30)"],
+    },
+  },
+
+  // Row 5 — shipping & seasonality
+  {
+    id: "superstore-ship-mode",
+    title: "Ship Mode Distribution",
+    description: "Order lines per shipping mode",
+    sql: `${SUPERSTORE_CTE}
+SELECT
+    toString(\`Ship Mode\`) AS ship_mode,
+    count() AS order_lines
+FROM events
+GROUP BY ship_mode
+ORDER BY order_lines DESC`,
+    chartType: "pie",
+    chartConfig: {
+      xKey: "order_lines",
+      yKeys: ["ship_mode"],
+    },
+  },
+  {
+    id: "superstore-shipping-delay",
+    title: "Shipping Delay by Mode",
+    description: "Average days between order date and ship date",
+    sql: `${SUPERSTORE_CTE}
+SELECT
+    toString(\`Ship Mode\`) AS ship_mode,
+    round(avg(dateDiff('day', ${SUPERSTORE_ORDER_DATE}, ${SUPERSTORE_SHIP_DATE})), 1) AS avg_days
+FROM events
+GROUP BY ship_mode
+ORDER BY avg_days DESC`,
+    chartType: "bar",
+    chartConfig: {
+      xKey: "ship_mode",
+      yKeys: ["avg_days"],
+      colors: ["oklch(0.7 0.18 85)"],
+    },
+  },
+  {
+    id: "superstore-seasonality",
+    title: "Sales Seasonality",
+    description: "Total revenue per calendar month across all years",
+    sql: `${SUPERSTORE_CTE}
+SELECT
+    toMonth(${SUPERSTORE_ORDER_DATE}) AS month_num,
+    arrayElement(
+      ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
+      toInt32(toMonth(${SUPERSTORE_ORDER_DATE}))
+    ) AS month,
+    round(sum(${SUPERSTORE_SALES})) AS sales
+FROM events
+GROUP BY month_num, month
+ORDER BY month_num`,
+    chartType: "bar",
+    chartConfig: {
+      xKey: "month",
+      yKeys: ["sales"],
+      colors: ["oklch(0.6 0.2 160)"],
+    },
+  },
+
+  // Row 6 — CDC pipeline health
+  {
+    id: "superstore-cdc-operations",
+    title: "CDC Operations",
+    description: "Insert / update / delete events per minute (last hour)",
+    sql: `SELECT
+    toStartOfMinute(inserted_at) AS minute,
+    countIf(toString(_etl_op) = 'insert') AS inserts,
+    countIf(toString(_etl_op) = 'update') AS updates,
+    countIf(toString(_etl_op) = 'delete') AS deletes
+FROM ${SUPERSTORE_TABLE}
+WHERE inserted_at >= now() - INTERVAL 1 HOUR
+GROUP BY minute
+ORDER BY minute`,
+    chartType: "bar",
+    chartConfig: {
+      xKey: "minute",
+      yKeys: ["inserts", "updates", "deletes"],
+      colors: [
+        "oklch(0.65 0.18 150)",
+        "oklch(0.7 0.18 85)",
+        "oklch(0.6 0.22 25)",
+      ],
+    },
+    skipDateFilter: true,
+    stacked: true,
+    showLegend: true,
+  },
+  {
+    id: "superstore-cdc-op-breakdown",
+    title: "CDC Event Types",
+    description: "All-time distribution of CDC operations in the event log",
+    sql: `SELECT
+    toString(_etl_op) AS op,
+    count() AS cnt
+FROM ${SUPERSTORE_TABLE}
+WHERE toString(_etl_op) IN ('copy', 'insert', 'update', 'delete')
+GROUP BY op
+ORDER BY cnt DESC`,
+    chartType: "pie",
+    chartConfig: {
+      xKey: "cnt",
+      yKeys: ["op"],
+    },
+    skipDateFilter: true,
+  },
+  {
+    id: "superstore-ingestion-throughput",
+    title: "Ingestion Throughput",
+    description: "CDC events ingested per minute (last hour)",
+    sql: `SELECT
+    toStartOfMinute(inserted_at) AS minute,
+    count() AS events
+FROM ${SUPERSTORE_TABLE}
+WHERE inserted_at >= now() - INTERVAL 1 HOUR
+GROUP BY minute
+ORDER BY minute`,
+    chartType: "area",
+    chartConfig: {
+      xKey: "minute",
+      yKeys: ["events"],
+      colors: ["oklch(0.6 0.2 160)"],
+    },
+    skipDateFilter: true,
   },
 ];

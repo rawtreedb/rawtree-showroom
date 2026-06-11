@@ -94,7 +94,7 @@ export const cloudfrontWafSecurity: UseCase = {
             "Set your RawTree credentials as environment variables. The AWS provider uses your default credentials or AWS_PROFILE.",
           codeBlock: {
             language: "bash",
-            code: `export RAWTREE_API_KEY="rw_..."
+            code: `export RAWTREE_API_KEY="rt_..."
 export RAWTREE_ORG="your-org"
 export RAWTREE_PROJECT="your-project"`,
           },
