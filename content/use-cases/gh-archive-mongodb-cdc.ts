@@ -218,7 +218,7 @@ config:
 
 secrets:
   mongodbUri: "mongodb+srv://user:pass@cluster.mongodb.net"
-  rawtreeApiKey: "rw_..."
+  rawtreeApiKey: "rt_..."
 EOF
 
 helm install gh-connector rawtree/rawtree-mongo-connector \\

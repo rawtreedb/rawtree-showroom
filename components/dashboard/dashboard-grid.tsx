@@ -38,7 +38,7 @@ function toDateInput(iso: string): string {
   return `${y}-${m}-${day}`;
 }
 
-export function DashboardGrid({ queries, dashboardConfig }: { queries: DashboardQuery[]; dashboardConfig: DashboardConfig }) {
+export function DashboardGrid({ queries, dashboardConfig, slug }: { queries: DashboardQuery[]; dashboardConfig: DashboardConfig; slug?: string }) {
   const [config, setConfig] = useState<RawtreeConfig | null>(null);
   const [demo, setDemo] = useState(false);
   const [results, setResults] = useState<Record<string, QueryResult | null>>({});
@@ -58,8 +58,8 @@ export function DashboardGrid({ queries, dashboardConfig }: { queries: Dashboard
 
   const query = useCallback(
     (sql: string, cfg?: RawtreeConfig | null) =>
-      cfg ? runQuery(cfg.endpoint, cfg.apiKey, sql) : runDemoQuery(sql),
-    []
+      cfg ? runQuery(cfg.endpoint, cfg.apiKey, sql) : runDemoQuery(sql, slug),
+    [slug]
   );
 
   const executeQueries = useCallback(

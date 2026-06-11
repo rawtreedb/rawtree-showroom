@@ -1,8 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 
+function envForSlug(slug: string | undefined, key: string): string | undefined {
+  if (slug) {
+    const slugKey = slug.toUpperCase().replace(/-/g, "_");
+    const value = process.env[`RAWTREE_DEMO_${key}_${slugKey}`];
+    if (value) return value;
+  }
+  return process.env[`RAWTREE_DEMO_${key}`];
+}
+
 export async function POST(req: NextRequest) {
-  const DEMO_ENDPOINT = process.env.RAWTREE_DEMO_ENDPOINT;
-  const DEMO_API_KEY = process.env.RAWTREE_DEMO_API_KEY;
+  const { sql, slug } = (await req.json()) as { sql?: string; slug?: string };
+
+  const DEMO_ENDPOINT = envForSlug(slug, "ENDPOINT");
+  const DEMO_API_KEY = envForSlug(slug, "API_KEY");
 
   if (!DEMO_ENDPOINT || !DEMO_API_KEY) {
     return NextResponse.json(
@@ -11,7 +22,6 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const { sql } = (await req.json()) as { sql?: string };
   if (!sql || typeof sql !== "string") {
     return NextResponse.json({ error: "Missing sql field" }, { status: 400 });
   }
