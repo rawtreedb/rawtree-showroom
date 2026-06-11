@@ -283,7 +283,14 @@ const WAF_CTE = `WITH events AS (
   SELECT *,
     toString(\`labels\`) AS labels_str,
     toString(\`ruleGroupList\`) AS ruleGroupList_str
-  FROM waf_logs
+  FROM (
+    SELECT *,
+      ROW_NUMBER() OVER (
+        PARTITION BY toString(\`httpRequest.requestId\`)
+        ORDER BY inserted_at DESC
+      ) AS _rn
+    FROM waf_logs
+  ) WHERE _rn = 1
 )`;
 
 export const wafSecurityQueries: DashboardQuery[] = [
@@ -367,20 +374,20 @@ LIMIT 30`,
     id: "waf-attack-types",
     title: "Attack Types",
     description: "Types of attacks identified in blocked requests",
-    sql: `SELECT
+    sql: `${WAF_CTE}
+SELECT
     arrayElement(
       splitByChar(':', JSONExtractString(lbl, 'name')),
       -1
     ) AS attack_type,
     count() AS requests
-FROM waf_logs
+FROM events
 ARRAY JOIN JSONExtractArrayRaw(ifNull(toJSONString(\`labels\`), '[]')) AS lbl
 WHERE \`action\` = 'BLOCK'
   AND JSONExtractString(lbl, 'name') != ''
 GROUP BY attack_type
 ORDER BY requests DESC
 LIMIT 10`,
-    skipDateFilter: true,
     chartType: "bar",
     chartConfig: {
       xKey: "attack_type",
@@ -464,20 +471,20 @@ LIMIT 10`,
     id: "waf-attack-categories",
     title: "Attack Categories",
     description: "Attack labels from WAF managed rules",
-    sql: `SELECT
+    sql: `${WAF_CTE}
+SELECT
     arrayElement(
       splitByChar(':', JSONExtractString(lbl, 'name')),
       -1
     ) AS label_name,
     count() AS cnt
-FROM waf_logs
+FROM events
 ARRAY JOIN JSONExtractArrayRaw(ifNull(toJSONString(\`labels\`), '[]')) AS lbl
 WHERE \`action\` = 'BLOCK'
   AND JSONExtractString(lbl, 'name') != ''
 GROUP BY label_name
 ORDER BY cnt DESC
 LIMIT 10`,
-    skipDateFilter: true,
     chartType: "pie",
     chartConfig: {
       xKey: "cnt",

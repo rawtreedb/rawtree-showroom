@@ -28,8 +28,9 @@ export default function HomePage() {
 
           <h1 className="text-4xl font-extrabold tracking-tight sm:text-5xl lg:text-6xl">
             One prompt.{" "}
+            <br className="hidden sm:block" />
             <span className="bg-gradient-to-r from-[#1B83FE] to-[#5F68FA] bg-clip-text text-transparent">
-              Instant analytics.
+              Instant analytics on RawTree.
             </span>
           </h1>
 

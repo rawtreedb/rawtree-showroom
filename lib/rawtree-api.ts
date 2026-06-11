@@ -29,11 +29,18 @@ export async function runQuery(
   return res.json();
 }
 
-export async function runDemoQuery(sql: string, slug?: string): Promise<QueryResult> {
+export interface DemoQueryRequest {
+  queryId: string;
+  slug: string;
+  dateFrom?: string;
+  dateTo?: string;
+}
+
+export async function runDemoQuery(params: DemoQueryRequest): Promise<QueryResult> {
   const res = await fetch("/api/demo-query", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ sql, slug }),
+    body: JSON.stringify(params),
   });
 
   if (!res.ok) {

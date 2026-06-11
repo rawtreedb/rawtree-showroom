@@ -56,12 +56,6 @@ export function DashboardGrid({ queries, dashboardConfig, slug }: { queries: Das
     setMounted(true);
   }, []);
 
-  const query = useCallback(
-    (sql: string, cfg?: RawtreeConfig | null) =>
-      cfg ? runQuery(cfg.endpoint, cfg.apiKey, sql) : runDemoQuery(sql, slug),
-    [slug]
-  );
-
   const executeQueries = useCallback(
     async (cfg: RawtreeConfig | null, from?: string, to?: string) => {
       const newLoading: Record<string, boolean> = {};
@@ -71,7 +65,9 @@ export function DashboardGrid({ queries, dashboardConfig, slug }: { queries: Das
       setResults({});
 
       try {
-        const statsResult = await query(buildStatsQuery(dashboardConfig), cfg);
+        const statsResult = cfg
+          ? await runQuery(cfg.endpoint, cfg.apiKey, buildStatsQuery(dashboardConfig))
+          : await runDemoQuery({ queryId: "__stats__", slug: slug! });
         if (statsResult.data[0]) {
           const row = statsResult.data[0];
           const parsed: Stats = {};
@@ -87,11 +83,20 @@ export function DashboardGrid({ queries, dashboardConfig, slug }: { queries: Das
       await Promise.allSettled(
         queries.map(async (q) => {
           try {
-            const sql =
-              !q.skipDateFilter && from && to
-                ? injectDateFilter(q.sql, from, to, dashboardConfig.dateExpression)
-                : q.sql;
-            const result = await query(sql, cfg);
+            let result: QueryResult;
+            if (cfg) {
+              const sql =
+                !q.skipDateFilter && from && to
+                  ? injectDateFilter(q.sql, from, to, dashboardConfig.dateExpression)
+                  : q.sql;
+              result = await runQuery(cfg.endpoint, cfg.apiKey, sql);
+            } else {
+              result = await runDemoQuery({
+                queryId: q.id,
+                slug: slug!,
+                ...(from && to ? { dateFrom: from, dateTo: to } : {}),
+              });
+            }
             setResults((prev) => ({ ...prev, [q.id]: result }));
           } catch (e) {
             setErrors((prev) => ({
@@ -104,13 +109,15 @@ export function DashboardGrid({ queries, dashboardConfig, slug }: { queries: Das
         })
       );
     },
-    [queries, dashboardConfig, query]
+    [queries, dashboardConfig, slug]
   );
 
   const initDashboard = useCallback(
     async (cfg: RawtreeConfig | null) => {
       try {
-        const rangeResult = await query(buildDateRangeQuery(dashboardConfig), cfg);
+        const rangeResult = cfg
+          ? await runQuery(cfg.endpoint, cfg.apiKey, buildDateRangeQuery(dashboardConfig))
+          : await runDemoQuery({ queryId: "__date_range__", slug: slug! });
         if (rangeResult.data[0]) {
           const row = rangeResult.data[0];
           setDateFrom(toDateInput(String(row.min_date)));
@@ -121,7 +128,7 @@ export function DashboardGrid({ queries, dashboardConfig, slug }: { queries: Das
       }
       executeQueries(cfg);
     },
-    [executeQueries, dashboardConfig, query]
+    [executeQueries, dashboardConfig, slug]
   );
 
   useEffect(() => {
