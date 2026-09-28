@@ -1,9 +1,11 @@
 import { ghArchiveMongodbCdc } from "@/content/use-cases/gh-archive-mongodb-cdc";
 import { cloudfrontWafSecurity } from "@/content/use-cases/cloudfront-waf-security";
 import { supabaseSuperstoreCdc } from "@/content/use-cases/supabase-superstore-cdc";
+import { jevPrQuality } from "@/content/use-cases/jev-pr-quality";
 import type { UseCase } from "@/lib/types";
 
 const useCases: UseCase[] = [
+  jevPrQuality,
   ghArchiveMongodbCdc,
   cloudfrontWafSecurity,
   supabaseSuperstoreCdc,
