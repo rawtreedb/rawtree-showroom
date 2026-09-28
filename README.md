@@ -1,36 +1,60 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# RawTree Showroom
 
-## Getting Started
+Open-source, self-hostable dashboards backed by RawTree. The Jev PR quality
+dashboard turns structured CI review events into contributor, pass-rate, and
+quality-trend views.
 
-First, run the development server:
+## Use the Jev dashboard
 
-```bash
+Open `/use-cases/jev-pr-quality/dashboard` and enter a RawTree **read-only** API
+key. The browser sends dashboard queries directly to `https://api.rawtree.com`.
+The key is held only in the current tab's memory: it is not persisted, placed in
+the URL, or sent to the Showroom server.
+
+The matching GitHub workflow writes events with a separate **write-only** key.
+Never reuse that write key in the dashboard. The expected table is
+`jev_pr_reviews`; its event schema and setup instructions live with the Jev
+workflow in [`rawtreedb/rawtree-platform`](https://github.com/rawtreedb/rawtree-platform/tree/main/scripts/jev-review).
+
+## Run locally
+
+Requirements: Node.js 24 and npm.
+
+```sh
+npm ci
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open <http://localhost:3000/use-cases/jev-pr-quality/dashboard>. No server-side
+RawTree credential or environment file is required.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Self-host with Docker
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```sh
+docker build -t rawtree-showroom .
+docker run --rm -p 3000:3000 rawtree-showroom
+```
 
-## Learn More
+The production image runs as an unprivileged user and contains Next.js's minimal
+standalone server. It does not contain a RawTree API key. Put TLS in front of the
+container before asking users to enter credentials.
 
-To learn more about Next.js, take a look at the following resources:
+## Deploy without Docker
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Any Node.js host can run the application:
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```sh
+npm ci
+npm run build
+npm run start
+```
 
-## Deploy on Vercel
+Vercel and other Next.js-compatible platforms can deploy the repository without
+additional configuration. The application needs outbound browser access to
+`https://api.rawtree.com`; its production Content Security Policy permits only
+that API and same-origin resources.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Add a dashboard
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+See [`docs/adding-a-dashboard.md`](docs/adding-a-dashboard.md) for the dashboard
+schema, supported charts, deduplication helpers, and registration steps.

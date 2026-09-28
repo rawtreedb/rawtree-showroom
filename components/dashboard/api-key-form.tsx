@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { KeyRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import type { RawtreeConfig } from "@/lib/rawtree-api";
+import { RAWTREE_API_URL, type RawtreeConfig } from "@/lib/rawtree-api";
 
 export function ApiKeyForm({
   onConnect,
@@ -12,12 +12,11 @@ export function ApiKeyForm({
   onConnect: (config: RawtreeConfig) => void;
   onDemo?: () => void;
 }) {
-  const [endpoint, setEndpoint] = useState("https://api.rawtree.com");
   const [apiKey, setApiKey] = useState("");
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    const config = { endpoint: endpoint.trim(), apiKey: apiKey.trim() };
+    const config = { endpoint: RAWTREE_API_URL, apiKey: apiKey.trim() };
     onConnect(config);
   }
 
@@ -28,26 +27,15 @@ export function ApiKeyForm({
       </div>
       <h2 className="mb-2 text-xl font-semibold">Connect to RawTree</h2>
       <p className="mb-8 text-sm text-muted-foreground">
-        Enter your RawTree API key to load the live dashboard. Credentials are
-        kept in memory for this tab only and are not saved; refreshing the page
-        clears them.
+        Enter a read-only API key to load your dashboard directly from RawTree.
+        The key stays in this tab&apos;s memory and is never saved or sent to the
+        dashboard server.
       </p>
       <form onSubmit={handleSubmit} className="space-y-4 text-left">
         <div>
           <label className="mb-1.5 block text-xs font-medium">
-            API Endpoint
+            Read-only API key
           </label>
-          <input
-            type="url"
-            value={endpoint}
-            onChange={(e) => setEndpoint(e.target.value)}
-            className="w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary"
-            placeholder="https://api.rawtree.com"
-            required
-          />
-        </div>
-        <div>
-          <label className="mb-1.5 block text-xs font-medium">API Key</label>
           <input
             type="password"
             value={apiKey}
@@ -56,6 +44,9 @@ export function ApiKeyForm({
             placeholder="rt_..."
             required
           />
+          <p className="mt-2 text-xs text-muted-foreground">
+            Connecting to <span className="font-mono">{RAWTREE_API_URL}</span>
+          </p>
         </div>
         <Button className="w-full" type="submit">
           Load Dashboard with your data
