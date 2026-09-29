@@ -3,10 +3,10 @@ import { buildDedupCte } from "@/lib/dashboard-queries";
 
 const dashboardConfig = {
   table: "jev_pr_reviews",
-  dateExpression: "parseDateTime64BestEffort(recorded_at)",
+  dateExpression: "parseDateTime64BestEffort(toString(recorded_at))",
   dedupIdColumn: "concat(repository, ':', toString(pr_number))",
   dedupTsColumn:
-    "tuple(parseDateTime64BestEffort(recorded_at), ifNull(run_id, 0), ifNull(run_attempt, 0))",
+    "tuple(parseDateTime64BestEffort(toString(recorded_at)), ifNull(run_id::Nullable(UInt64), 0), ifNull(run_attempt::Nullable(UInt64), 0))",
   stats: [
     {
       label: "Reviewed PRs",
@@ -15,17 +15,17 @@ const dashboardConfig = {
     },
     {
       label: "Contributors",
-      sqlExpression: "uniq(author_login) AS contributors",
+      sqlExpression: "uniq(author_login::Nullable(String)) AS contributors",
       key: "contributors",
     },
     {
       label: "Avg. Minimum Score",
-      sqlExpression: "round(avg(minimum_score), 2) AS average_minimum_score",
+      sqlExpression: "round(avg(minimum_score::Nullable(Float64)), 2) AS average_minimum_score",
       key: "average_minimum_score",
     },
     {
       label: "Pass Rate",
-      sqlExpression: "round(100 * avg(if(passed, 1, 0)), 1) AS pass_rate",
+      sqlExpression: "round(100 * avg(if(ifNull(passed::Nullable(Bool), false), 1, 0)), 1) AS pass_rate",
       key: "pass_rate",
     },
   ],
@@ -90,10 +90,10 @@ export const jevPrQuality: UseCase = {
       description: "Average of each contributor's minimum applicable PR score",
       sql: `${CTE}
 SELECT
-  author_login AS author,
-  round(avg(minimum_score), 2) AS quality_score,
+  author_login::Nullable(String) AS author,
+  round(avg(minimum_score::Nullable(Float64)), 2) AS quality_score,
   count() AS reviewed_prs,
-  round(100 * avg(if(passed, 1, 0)), 1) AS pass_rate
+  round(100 * avg(if(ifNull(passed::Nullable(Bool), false), 1, 0)), 1) AS pass_rate
 FROM events
 GROUP BY author
 ORDER BY quality_score DESC, pass_rate DESC, reviewed_prs DESC
@@ -113,9 +113,9 @@ LIMIT 10`,
       description: "Daily average and lowest minimum PR score",
       sql: `${CTE}
 SELECT
-  toDate(parseDateTime64BestEffort(recorded_at)) AS day,
-  round(avg(minimum_score), 2) AS average_score,
-  round(min(minimum_score), 2) AS lowest_score
+  toDate(parseDateTime64BestEffort(toString(recorded_at))) AS day,
+  round(avg(minimum_score::Nullable(Float64)), 2) AS average_score,
+  round(min(minimum_score::Nullable(Float64)), 2) AS lowest_score
 FROM events
 GROUP BY day
 ORDER BY day`,
@@ -135,7 +135,7 @@ ORDER BY day`,
       description: "Latest passing and below-threshold PR results",
       sql: `${CTE}
 SELECT
-  if(passed, 'Passed', 'Below threshold') AS outcome,
+  if(ifNull(passed::Nullable(Bool), false), 'Passed', 'Below threshold') AS outcome,
   count() AS reviews
 FROM events
 GROUP BY outcome
@@ -155,7 +155,7 @@ ORDER BY reviews DESC`,
       description: "Number of latest PR evaluations represented",
       sql: `${CTE}
 SELECT
-  author_login AS author,
+  author_login::Nullable(String) AS author,
   count() AS reviews
 FROM events
 GROUP BY author
