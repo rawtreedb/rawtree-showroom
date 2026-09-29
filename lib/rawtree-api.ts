@@ -5,6 +5,8 @@ export interface QueryResult {
   statistics: { elapsed: number; rows_read: number; bytes_read: number };
 }
 
+export const RAWTREE_API_URL = "https://api.rawtree.com";
+
 export async function runQuery(
   endpoint: string,
   apiKey: string,
